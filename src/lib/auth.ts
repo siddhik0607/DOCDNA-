@@ -44,7 +44,6 @@ export function signIn(mode: "signin" | "signup" = "signin") {
 export function signOut() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(AUTH_KEY);
-  localStorage.removeItem("docdna.wallet.v1");
   emitAuthChange();
 }
 

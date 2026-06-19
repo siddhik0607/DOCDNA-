@@ -1,12 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { loadRecords, type DocRecord } from "@/lib/docdna";
+import { getDashboardStats, getRecentActivity, getTrendSeries, loadUserRecords, subscribeRecords, type DocRecord } from "@/lib/docdna";
 import {
   ShieldCheck, ShieldAlert, Clock, Upload, ArrowRight,
   CalendarRange, FileUp, TriangleAlert,
 } from "lucide-react";
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
 
 export const Route = createFileRoute("/_app/dashboard")({
@@ -16,47 +16,23 @@ export const Route = createFileRoute("/_app/dashboard")({
 
 function Dashboard() {
   const [records, setRecords] = useState<DocRecord[]>([]);
-  useEffect(() => { setRecords(loadRecords()); }, []);
+  useEffect(() => {
+    const sync = () => setRecords(loadUserRecords());
+    sync();
+    return subscribeRecords(sync);
+  }, []);
 
-  const verified = Math.max(1, records.filter(r => r.status === "authentic").length);
-  const tampered = Math.max(12, records.filter(r => r.status === "tampered").length);
-  const pending = Math.max(142, records.filter(r => r.status === "pending").length);
-  const fraudAlerts = Math.max(2, Math.ceil(tampered / 6));
-
-  const trends = Array.from({ length: 9 }, (_, i) => {
-    const slice = records.slice(i * 2, i * 2 + 4);
-    return {
-      day: ["May 1","May 4","May 8","May 11","May 16","May 22","May 25","May 29","May 31"][i],
-      volume: slice.length + 3 + ((i + 1) % 4),
-      activity: slice.filter(r => r.status === "authentic").length + 1 + (i % 3),
-    };
-  });
+  const { verified, tampered, pending, fraudAlerts } = getDashboardStats(records);
+  const trends = getTrendSeries(records);
 
   const stats = [
-    { label: "Verified", value: verified, icon: ShieldCheck, tone: "text-success", note: "+12.4%" },
-    { label: "Pending", value: pending, icon: Clock, tone: "text-warning", note: "Steady" },
-    { label: "Tampered", value: tampered, icon: ShieldAlert, tone: "text-danger", note: "+4.2%" },
-    { label: "Fraud Alerts", value: fraudAlerts, icon: TriangleAlert, tone: "text-primary", note: "New: 2" },
+    { label: "Verified Documents", value: verified, icon: ShieldCheck, tone: "text-success", note: `${verified} authentic uploads` },
+    { label: "Pending Documents", value: pending, icon: Clock, tone: "text-warning", note: `${pending} awaiting review` },
+    { label: "Tampered Documents", value: tampered, icon: ShieldAlert, tone: "text-danger", note: `${tampered} hash mismatches` },
+    { label: "Fraud Alerts", value: fraudAlerts, icon: TriangleAlert, tone: "text-primary", note: `${fraudAlerts} live alerts` },
   ];
 
-  const recentHistory = records.slice(0, 5).map((record, index) => ({
-    title:
-      record.status === "authentic"
-        ? "Verified Document"
-        : record.status === "tampered"
-        ? "Tampered Document"
-        : "Pending Verification",
-    detail: record.name,
-    time: new Date(record.timestamp).toLocaleDateString(),
-    tone: record.status,
-    key: `${record.id}-${index}`,
-  }));
-
-  const displayHistory = recentHistory.length
-    ? recentHistory
-    : [
-        { title: "Verified Document", detail: "NotarizationDoc1.pdf", time: "19/06/2026", tone: "authentic", key: "a" },
-      ];
+  const displayHistory = getRecentActivity(records);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -92,29 +68,36 @@ function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.55fr_0.85fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
         <div className="app-panel rounded-2xl p-6">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold">Verification Volume</h2>
-              <p className="text-xs text-muted-foreground">Daily verification activity across the network.</p>
+              <p className="text-xs text-muted-foreground">Bar graph based on this user's upload and verification history.</p>
             </div>
-            <div className="text-xs text-muted-foreground">Daily Activity</div>
+            <div className="text-xs text-muted-foreground">{records.length} total uploads</div>
           </div>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-56 w-full">
+            {trends.length === 0 ? (
+              <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                Upload documents to generate real verification analytics.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trends} margin={{ left: -26, right: 8, top: 8, bottom: 0 }} barGap={8}>
                 <CartesianGrid stroke="rgba(60, 44, 31, 0.06)" vertical={false} />
-                <XAxis dataKey="day" stroke="#9C948E" fontSize={10} tickLine={false} axisLine={false} />
+                <XAxis dataKey="label" stroke="#9C948E" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="#9C948E" fontSize={10} tickLine={false} axisLine={false} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Tooltip
                   cursor={{ fill: "rgba(242, 141, 87, 0.06)" }}
                   contentStyle={{ background: "#FFFFFF", border: "1px solid rgba(60, 44, 31, 0.08)", borderRadius: 14, fontSize: 12, color: "#2C2926", boxShadow: "0 14px 32px -24px rgba(104, 78, 51, 0.22)" }}
                 />
-                <Bar dataKey="volume" fill="rgba(242, 191, 71, 0.55)" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="activity" fill="rgba(122, 191, 103, 0.72)" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="authentic" name="Authentic Documents" fill="#7ABF67" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="tampered" name="Tampered Documents" fill="#EF4444" radius={[8, 8, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -130,7 +113,7 @@ function Dashboard() {
               </Link>
             </div>
             <div className="mt-5 space-y-4">
-              {displayHistory.map(item => (
+              {displayHistory.length > 0 ? displayHistory.map(item => (
                 <div key={item.key} className="flex items-start gap-3">
                   <div className={`mt-1 h-2.5 w-2.5 rounded-full ${
                     item.tone === "tampered" ? "bg-danger" : item.tone === "pending" ? "bg-warning" : "bg-success"
@@ -141,7 +124,9 @@ function Dashboard() {
                   </div>
                   <div className="text-[11px] text-muted-foreground">{item.time}</div>
                 </div>
-              ))}
+              )) : (
+                <div className="text-sm text-muted-foreground">No recent activity yet. Upload a document to populate the timeline.</div>
+              )}
             </div>
           </div>
 

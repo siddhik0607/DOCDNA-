@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { formatBytes, loadRecords, shortHash, type DocRecord } from "@/lib/docdna";
+import { formatBytes, loadUserRecords, shortHash, subscribeRecords, type DocRecord } from "@/lib/docdna";
 import { Search, FileText, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/history")({
@@ -14,7 +14,11 @@ function HistoryPage() {
   const [records, setRecords] = useState<DocRecord[]>([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  useEffect(() => { setRecords(loadRecords()); }, []);
+  useEffect(() => {
+    const sync = () => setRecords(loadUserRecords());
+    sync();
+    return subscribeRecords(sync);
+  }, []);
 
   const filtered = useMemo(() => records
     .filter(r => {
@@ -121,6 +125,15 @@ function HistoryCard({ record }: { record: DocRecord }) {
           {authentic ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
           {authentic ? "Proof verified" : "Tampering detected"}
         </div>
+      </div>
+
+      <div className="mt-4">
+        <a
+          href={`/history/${record.id}`}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-card/60 px-4 py-2 text-xs font-medium hover:bg-card"
+        >
+          View document details
+        </a>
       </div>
 
       <div className="mt-5 grid gap-3 lg:grid-cols-2">

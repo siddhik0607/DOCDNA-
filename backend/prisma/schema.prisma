@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentStatus {
+  REGISTERED
+  VERIFIED
+  TAMPERED
+  DUPLICATE
+  REJECTED
+}
+
+enum VerificationStatus {
+  AUTHENTIC
+  TAMPERED
+  NOT_FOUND
+  DUPLICATE
+}
+
+model User {
+  id            String       @id @default(uuid()) @db.Uuid
+  walletAddress String       @unique @map("wallet_address")
+  email         String?
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  documents     Document[]
+  nonces        WalletNonce[]
+
+  @@map("users")
+}
+
+model Document {
+  id                  String             @id @default(uuid()) @db.Uuid
+  fileName            String             @map("file_name")
+  fileType            String             @map("file_type")
+  documentHash        String             @unique @map("document_hash")
+  ipfsCid             String             @map("ipfs_cid")
+  gatewayUrl          String             @map("gateway_url")
+  ownerWallet         String             @map("owner_wallet")
+  blockchainTxHash    String             @map("blockchain_tx_hash")
+  blockchainTimestamp DateTime           @map("blockchain_timestamp")
+  documentDna         String             @map("document_dna")
+  status              DocumentStatus     @default(REGISTERED)
+  trustScore          Int                @default(100) @map("trust_score")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  ownerId             String?            @db.Uuid
+  owner               User?              @relation(fields: [ownerId], references: [id])
+  versions            DocumentVersion[]
+  auditTrails         AuditTrail[]
+  verificationLogs    VerificationLog[]
+
+  @@index([fileName, ownerWallet])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id            String   @id @default(uuid()) @db.Uuid
+  documentId    String   @map("document_id") @db.Uuid
+  versionNumber Int      @map("version_number")
+  documentHash  String   @map("document_hash")
+  ipfsCid       String   @map("ipfs_cid")
+  createdAt     DateTime @default(now()) @map("created_at")
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, versionNumber])
+  @@map("document_versions")
+}
+
+model AuditTrail {
+  id         String    @id @default(uuid()) @db.Uuid
+  documentId String?   @map("document_id") @db.Uuid
+  eventType  String    @map("event_type")
+  details    Json      @db.JsonB
+  createdAt  DateTime  @default(now()) @map("created_at")
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([eventType, createdAt])
+  @@map("audit_trails")
+}
+
+model VerificationLog {
+  id               String             @id @default(uuid()) @db.Uuid
+  documentId       String?            @map("document_id") @db.Uuid
+  status           VerificationStatus
+  trustScore       Int                @map("trust_score")
+  verificationTime DateTime           @map("verification_time")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  document         Document?          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("verification_logs")
+}
+
+model WalletNonce {
+  id        String   @id @default(uuid()) @db.Uuid
+  wallet    String   @unique @map("wallet_address")
+  nonce     String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  userId    String?  @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("wallet_nonces")
+}

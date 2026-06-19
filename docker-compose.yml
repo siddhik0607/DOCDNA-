@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5000:5000"
+    depends_on:
+      - ai-service
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+  ai-service:
+    build:
+      context: ./ai-service
+    ports:
+      - "8001:8001"
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["localdb"]
+    environment:
+      POSTGRES_DB: docdna
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - docdna-postgres:/var/lib/postgresql/data
+
+volumes:
+  docdna-postgres:

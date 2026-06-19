@@ -1,0 +1,24 @@
+{
+  "verified": 2,
+  "tampered": 2,
+  "pending": 0,
+  "total": 4,
+  "documents": [
+    {
+      "id": "seed-doc-1",
+      "fileName": "OfferLetter.pdf",
+      "hash": "89159828fb...",
+      "cid": "bafymz...",
+      "wallet": "0x5543...",
+      "txHash": "0x256b...",
+      "status": "authentic",
+      "timestamp": "2026-06-19T09:00:00.000Z",
+      "createdAt": "2026-06-19T09:00:00.000Z",
+      "events": [
+        { "at": "2026-06-19T09:00:00.000Z", "label": "Verified Document" },
+        { "at": "2026-06-19T09:01:00.000Z", "label": "Blockchain Registered" },
+        { "at": "2026-06-19T09:02:00.000Z", "label": "IPFS Stored" }
+      ]
+    }
+  ]
+}

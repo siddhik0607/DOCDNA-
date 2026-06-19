@@ -1,0 +1,13 @@
+process.env.NODE_ENV ??= "test";
+process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/docdna";
+process.env.SUPABASE_URL ??= "https://example.supabase.co";
+process.env.SUPABASE_ANON_KEY ??= "anon-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "service-role-key";
+process.env.JWT_SECRET ??= "test-secret-key-with-at-least-32-chars";
+process.env.ALCHEMY_RPC_URL ??= "https://polygon-amoy.g.alchemy.com/v2/test";
+process.env.PRIVATE_KEY ??= "0x0123456789012345678901234567890123456789012345678901234567890123";
+process.env.CONTRACT_ADDRESS ??= "0x0000000000000000000000000000000000000001";
+process.env.PINATA_JWT ??= "pinata-jwt";
+process.env.PINATA_GATEWAY ??= "gateway.mypinata.cloud";
+process.env.AI_SERVICE_URL ??= "http://localhost:8001";
+process.env.CORS_ORIGIN ??= "http://localhost:3000";

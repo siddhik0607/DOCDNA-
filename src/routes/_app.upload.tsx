@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Upload as UploadIcon, FileText, Hash, Link2, Database, CheckCircle2,
-  Loader2, ShieldCheck, ShieldAlert, Copy, ExternalLink, RotateCcw,
+  Loader2, ShieldCheck, ShieldAlert, Copy, ExternalLink, RotateCcw, Download,
 } from "lucide-react";
 import {
   sha256, mockCid, mockTx, getWallet, addRecord, detectTamper, findByHash,
-  mockDiff, formatBytes, type DocRecord,
+  mockDiff, formatBytes, type DocRecord, generateDocumentQRCode, loadCurrentResult, saveCurrentResult,
 } from "@/lib/docdna";
-import { DnaVisual } from "@/components/DnaVisual";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/upload")({
@@ -26,17 +25,34 @@ function UploadPage() {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const reset = () => { setFile(null); setStage("idle"); setResult(null); };
+  useEffect(() => {
+    const storedResult = loadCurrentResult();
+    if (storedResult) {
+      setResult(storedResult);
+      setStage("done");
+    }
+  }, []);
+
+  const reset = () => {
+    setFile(null);
+    setStage("idle");
+    setResult(null);
+    saveCurrentResult(null);
+  };
 
   const handleFile = useCallback(async (f: File) => {
-    setFile(f); setResult(null); setStage("hashing");
+    setFile(f);
+    setResult(null);
+    saveCurrentResult(null);
+    setStage("hashing");
     try {
       const hash = await sha256(f);
       await wait(700);
 
       // Check tamper / existing
-      const prior = findByHash(hash);
-      const tamperedFrom = detectTamper(f.name, hash);
+      const wallet = getWallet();
+      const prior = findByHash(hash, wallet);
+      const tamperedFrom = detectTamper(f.name, hash, f.size, wallet);
 
       setStage("ipfs");
       const cid = mockCid();
@@ -45,8 +61,16 @@ function UploadPage() {
       const txHash = mockTx();
       await wait(1100);
 
-      const wallet = getWallet();
       const now = Date.now();
+      const qrCode = await generateDocumentQRCode({
+        name: f.name,
+        hash,
+        cid,
+        txHash,
+        wallet,
+        status: tamperedFrom ? "tampered" : "authentic",
+        timestamp: now,
+      });
 
       let rec: DocRecord;
       if (prior) {
@@ -59,7 +83,9 @@ function UploadPage() {
           txHash,
           wallet,
           timestamp: now,
+          createdAt: new Date(now).toISOString(),
           status: "authentic",
+          qrCode,
           events: [
             { at: now, label: "Uploaded for verification" },
             { at: now + 500, label: "SHA-256 generated" },
@@ -77,31 +103,35 @@ function UploadPage() {
           size: f.size,
           hash, cid, txHash, wallet,
           timestamp: now,
+          createdAt: new Date(now).toISOString(),
           status: "tampered",
+          qrCode,
           changes: diff.changes,
           trustScore: diff.trustScore,
           events: [
             { at: now, label: "Uploaded for verification" },
             { at: now + 500, label: "SHA-256 generated" },
             { at: tamperedFrom.timestamp, label: "Original anchored" },
-            { at: now, label: "Modification detected" },
+            { at: now, label: "Hash Mismatch Detected" },
             { at: now + 1000, label: "Tampered report generated" },
           ],
         };
         addRecord(rec);
-        toast.error("Tampering detected.");
+        toast.error("Document is tampered.");
       } else {
         rec = {
           id: cryptoRandom(),
           name: f.name, size: f.size,
           hash, cid, txHash, wallet,
           timestamp: now,
+          createdAt: new Date(now).toISOString(),
           status: "authentic",
+          qrCode,
           events: [
             { at: now, label: "Uploaded for verification" },
             { at: now + 500, label: "SHA-256 generated" },
-            { at: now + 1200, label: "Pinned on IPFS" },
-            { at: now + 2000, label: "Anchored on Polygon Amoy" },
+            { at: now + 1200, label: "IPFS Stored" },
+            { at: now + 2000, label: "Blockchain Registered" },
           ],
         };
         addRecord(rec);
@@ -109,6 +139,7 @@ function UploadPage() {
       }
 
       setResult(rec);
+      saveCurrentResult(rec);
       setStage("done");
     } catch (e) {
       console.error(e);
@@ -133,7 +164,7 @@ function UploadPage() {
       </div>
 
       <AnimatePresence mode="wait">
-        {!file && (
+        {!file && !(result && stage === "done") && (
           <motion.label
             key="zone"
             initial={{ opacity: 0, y: 10 }}
@@ -209,20 +240,35 @@ function ResultCard({ rec, onReset }: { rec: DocRecord; onReset: () => void }) {
         {authentic ? <ShieldCheck className="h-5 w-5 text-success" /> : <ShieldAlert className="h-5 w-5 text-danger" />}
         <div className="flex-1">
           <div className={`font-display text-lg font-semibold ${authentic ? "text-success" : "text-danger"}`}>
-            {authentic ? "✓ Document Authentic" : "❌ Document Tampered"}
+            {authentic ? "✓ Document Authentic" : "❌ Document Is Tampered"}
           </div>
-          <div className="text-xs text-muted-foreground">{authentic ? "Hash matches the on-chain record." : "Hash differs from the original — see detected changes below."}</div>
+          <div className="text-xs text-muted-foreground">{authentic ? "Hash matches the stored verification record." : "Hash mismatch detected — see changed fields and trust score below."}</div>
         </div>
         <button onClick={onReset} className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-xs ring-1 ring-border hover:bg-card/70">
           <RotateCcw className="h-3 w-3" /> New file
         </button>
       </div>
 
-      <div className="grid gap-8 p-8 lg:grid-cols-[260px_1fr]">
-        <div className="flex flex-col items-center">
-          <DnaVisual hash={rec.hash} size={220} />
-          <div className="mt-3 font-display text-sm">{rec.name}</div>
-          <div className="text-xs text-muted-foreground">{formatBytes(rec.size)}</div>
+      <div className="grid gap-8 p-8 lg:grid-cols-[320px_1fr]">
+        <div className="flex flex-col items-center justify-center gap-4">
+          {rec.qrCode && (
+            <div className="flex h-[260px] w-[260px] items-center justify-center rounded-[2rem] border border-border bg-black/35 p-5 backdrop-blur">
+              <img src={rec.qrCode} alt="Document QR code" className="h-full w-full rounded-[1.5rem] object-contain" />
+            </div>
+          )}
+          <div className="text-center">
+            <div className="font-display text-sm">{rec.name}</div>
+            <div className="text-xs text-muted-foreground">{formatBytes(rec.size)}</div>
+          </div>
+          {rec.qrCode && (
+            <a
+              href={rec.qrCode}
+              download={`${rec.name.replace(/\.[^.]+$/, "")}-qr.png`}
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card/60 px-4 py-2 text-xs font-medium hover:bg-card"
+            >
+              <Download className="h-4 w-4" /> Download QR
+            </a>
+          )}
         </div>
 
         <div className="space-y-4">
